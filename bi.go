@@ -13,16 +13,9 @@ import (
 	"github.com/boltdb/bolt"
 )
 
-type Config struct {
-	DataDir     string
-	FlushPeriod time.Duration
-}
-
 var (
-	BiConfig = Config{
-		DataDir:     "/tmp/bi.bolt",
-		FlushPeriod: time.Minute,
-	}
+	DataPath    = "/tmp/bi.bolt"
+	FlushPeriod = time.Minute
 )
 
 const (
@@ -47,7 +40,8 @@ type valueItem struct {
 }
 
 var (
-	gCounterChan chan valueItem
+	gCounterChan    = make(chan valueItem, 1000)
+	gForceFlushChan = make(chan chan struct{})
 )
 
 func itob(v uint64) (b [8]byte) {
@@ -60,8 +54,8 @@ type kv struct {
 	Value int
 }
 
-func CollectValues(ch chan valueItem) {
-	nextFlushTime := time.Now().Add(BiConfig.FlushPeriod)
+func collectValues(ch chan valueItem) {
+	nextFlushTime := time.Now().Add(FlushPeriod)
 	counters := make(map[string][]timedValue)
 	flush := func() {
 		if len(counters) > 0 {
@@ -98,7 +92,7 @@ func CollectValues(ch chan valueItem) {
 
 			counters = make(map[string][]timedValue)
 		}
-		nextFlushTime = time.Now().Add(BiConfig.FlushPeriod)
+		nextFlushTime = time.Now().Add(FlushPeriod)
 	}
 	for {
 		dueToFlush := nextFlushTime.Sub(time.Now())
@@ -107,6 +101,9 @@ func CollectValues(ch chan valueItem) {
 			continue
 		}
 		select {
+		case done := <-gForceFlushChan:
+			flush()
+			done <- struct{}{}
 		case <-time.After(dueToFlush):
 			flush()
 		case item := <-ch:
@@ -116,8 +113,7 @@ func CollectValues(ch chan valueItem) {
 }
 
 func init() {
-	gCounterChan = make(chan valueItem, 1000)
-	go CollectValues(gCounterChan)
+	go collectValues(gCounterChan)
 }
 
 func AddValue(name string, value int) {
@@ -128,6 +124,12 @@ func AddValue(name string, value int) {
 			when:  time.Now().AddDate(0, 0, -rand.Intn(1000)),
 		},
 	}
+}
+
+func Flush() {
+	done := make(chan struct{})
+	gForceFlushChan <- done
+	<-done
 }
 
 type boltDBBox struct {
@@ -144,7 +146,7 @@ func (box *boltDBBox) alloc() (*bolt.DB, error) {
 	defer box.Unlock()
 
 	if box.db == nil {
-		db, err := bolt.Open(path.Join(BiConfig.DataDir, "bi.bolt"), 0644, nil)
+		db, err := bolt.Open(path.Join(DataPath, "bi.bolt"), 0644, nil)
 		if err != nil {
 			return nil, err
 		}

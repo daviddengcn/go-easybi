@@ -40,5 +40,6 @@ func handler(w http.ResponseWriter, req *http.Request) {
 }
 
 func HandleRequest(path string) {
+	log.Println("Easy-bi handle request at " + path)
 	http.HandleFunc(path, handler)
 }
