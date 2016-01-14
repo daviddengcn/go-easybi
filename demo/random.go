@@ -21,7 +21,7 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	rand.Seed(time.Now().UnixNano())
 
-	bi.BiConfig.DataDir = "/Users/david/tmp/bi"
+	bi.BiConfig.DataDir = "/Users/david/tmp/bi.bolt"
 	bi.BiConfig.FlushPeriod = time.Second
 	go func() {
 		for {

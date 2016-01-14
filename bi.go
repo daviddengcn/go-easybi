@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
-	"path"
 	"sync"
 	"time"
 
@@ -40,8 +38,7 @@ type valueItem struct {
 }
 
 var (
-	gCounterChan    = make(chan valueItem, 1000)
-	gForceFlushChan = make(chan chan struct{})
+	gCounterChan = make(chan interface{}, 1000)
 )
 
 func itob(v uint64) (b [8]byte) {
@@ -54,7 +51,7 @@ type kv struct {
 	Value int
 }
 
-func collectValues(ch chan valueItem) {
+func collectValues() {
 	nextFlushTime := time.Now().Add(FlushPeriod)
 	counters := make(map[string][]timedValue)
 	flush := func() {
@@ -101,19 +98,22 @@ func collectValues(ch chan valueItem) {
 			continue
 		}
 		select {
-		case done := <-gForceFlushChan:
-			flush()
-			done <- struct{}{}
 		case <-time.After(dueToFlush):
 			flush()
-		case item := <-ch:
-			counters[item.name] = append(counters[item.name], item.timedValue)
+		case item := <-gCounterChan:
+			switch it := item.(type) {
+			case valueItem:
+				counters[it.name] = append(counters[it.name], it.timedValue)
+			case chan struct{}:
+				flush()
+				it <- struct{}{}
+			}
 		}
 	}
 }
 
 func init() {
-	go collectValues(gCounterChan)
+	go collectValues()
 }
 
 func AddValue(name string, value int) {
@@ -121,14 +121,14 @@ func AddValue(name string, value int) {
 		name: name,
 		timedValue: timedValue{
 			value: value,
-			when:  time.Now().AddDate(0, 0, -rand.Intn(1000)),
+			when:  time.Now(),
 		},
 	}
 }
 
 func Flush() {
 	done := make(chan struct{})
-	gForceFlushChan <- done
+	gCounterChan <- done
 	<-done
 }
 
@@ -146,7 +146,7 @@ func (box *boltDBBox) alloc() (*bolt.DB, error) {
 	defer box.Unlock()
 
 	if box.db == nil {
-		db, err := bolt.Open(path.Join(DataPath, "bi.bolt"), 0644, nil)
+		db, err := bolt.Open(DataPath, 0644, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +216,7 @@ func (c *Counter) ToJSON() []byte {
 }
 
 // Returns the zero value of Counter if parsing failed.
-func CounterFromJSON(j []byte) Counter {
+func counterFromJSON(j []byte) Counter {
 	var c Counter
 	if err := json.Unmarshal(j, &c); err != nil {
 		log.Printf("Parsing JSON %v failed: %v, the zero value used", string(j), err)
@@ -250,7 +250,7 @@ func ReadDataOfName(tp, name string) ([]LabeledCounter, error) {
 		if err := namedB.ForEach(func(k, v []byte) error {
 			counters = append(counters, LabeledCounter{
 				Label:   string(k),
-				Counter: CounterFromJSON(v),
+				Counter: counterFromJSON(v),
 			})
 			return nil
 		}); err != nil {
@@ -299,7 +299,7 @@ func Process() {
 				}
 				namedB, err := b.CreateBucketIfNotExists([]byte(name))
 				label_bs := []byte(label)
-				c := CounterFromJSON(namedB.Get(label_bs))
+				c := counterFromJSON(namedB.Get(label_bs))
 				c.Append(value)
 				if err := namedB.Put(label_bs, c.ToJSON()); err != nil {
 					log.Printf("b.Put failed: %v", err)
