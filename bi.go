@@ -8,6 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golangplus/encoding/json"
+	"github.com/golangplus/errors"
+
 	"github.com/boltdb/bolt"
 )
 
@@ -28,6 +31,7 @@ const (
 )
 
 type timedValue struct {
+	aggr  AggregateMethod
 	value int
 	when  time.Time
 }
@@ -47,6 +51,7 @@ func itob(v uint64) (b [8]byte) {
 }
 
 type kv struct {
+	Aggr  AggregateMethod
 	Key   string
 	Value int
 }
@@ -66,17 +71,16 @@ func collectValues() {
 				if err := db.Update(func(tx *bolt.Tx) error {
 					b, err := tx.CreateBucketIfNotExists([]byte("active"))
 					if err != nil {
-						log.Printf("CreateBucketIfNotExists: %v", err)
-						return err
+						return errorsp.WithStacks(err)
 					}
 					for name, items := range counters {
 						for _, item := range items {
 							ts := itob(uint64(item.when.UnixNano()))
-							kv, _ := json.Marshal(kv{
+							if err := b.Put(ts[:], jsonp.MarshalIgnoreError(kv{
+								Aggr:  item.aggr,
 								Key:   name,
 								Value: item.value,
-							})
-							if err := b.Put(ts[:], kv); err != nil {
+							})); err != nil {
 								log.Printf("Put failed: %v", err)
 							}
 						}
@@ -116,10 +120,11 @@ func init() {
 	go collectValues()
 }
 
-func AddValue(name string, value int) {
+func AddValue(aggr AggregateMethod, name string, value int) {
 	gCounterChan <- valueItem{
 		name: name,
 		timedValue: timedValue{
+			aggr:  aggr,
 			value: value,
 			when:  time.Now(),
 		},
@@ -191,38 +196,6 @@ func ReadNames() ([]string, error) {
 		return names, err
 	}
 	return names, nil
-}
-
-type Counter struct {
-	Sum int
-	Div int
-}
-
-func (c *Counter) Count() int {
-	if c.Div == 0 {
-		return 0
-	}
-	return (c.Sum + c.Div/2) / c.Div
-}
-
-func (c *Counter) Append(v int) {
-	c.Sum += v
-	c.Div++
-}
-
-func (c *Counter) ToJSON() []byte {
-	j, _ := json.Marshal(c)
-	return j
-}
-
-// Returns the zero value of Counter if parsing failed.
-func counterFromJSON(j []byte) Counter {
-	var c Counter
-	if err := json.Unmarshal(j, &c); err != nil {
-		log.Printf("Parsing JSON %v failed: %v, the zero value used", string(j), err)
-		c = Counter{}
-	}
-	return c
 }
 
 type LabeledCounter struct {
@@ -300,7 +273,7 @@ func Process() {
 				namedB, err := b.CreateBucketIfNotExists([]byte(name))
 				label_bs := []byte(label)
 				c := counterFromJSON(namedB.Get(label_bs))
-				c.Append(value)
+				c.Append(kv.Aggr, value)
 				if err := namedB.Put(label_bs, c.ToJSON()); err != nil {
 					log.Printf("b.Put failed: %v", err)
 					return err
