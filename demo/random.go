@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -13,7 +12,11 @@ import (
 func genValues() {
 	for {
 		time.Sleep(time.Duration(rand.Int31n(1000)) * time.Millisecond)
-		bi.AddValue(fmt.Sprintf("current-%c", 'a'+rune(rand.Int31n(26))), int(rand.Int31n(10)+1))
+		value := int(rand.Int31n(10) + 1)
+		bi.AddValue(bi.Average, "average", value)
+		bi.AddValue(bi.Max, "max", value)
+		bi.AddValue(bi.Min, "min", value)
+		bi.AddValue(bi.Sum, "sum", value)
 	}
 }
 
