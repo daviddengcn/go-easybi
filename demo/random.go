@@ -13,10 +13,15 @@ func genValues() {
 	for {
 		time.Sleep(time.Duration(rand.Int31n(1000)) * time.Millisecond)
 		value := int(rand.Int31n(10) + 1)
-		bi.AddValue(bi.Average, "average", value)
-		bi.AddValue(bi.Max, "max", value)
-		bi.AddValue(bi.Min, "min", value)
-		bi.AddValue(bi.Sum, "sum", value)
+		bi.AddValue(bi.Average, "a.average", value)
+		bi.AddValue(bi.Max, "a.max", value)
+		bi.AddValue(bi.Min, "a.min", value)
+		bi.AddValue(bi.Sum, "a.sum", value)
+		value = int(rand.Int31n(10) + 1)
+		bi.AddValue(bi.Average, "b.average", value)
+		bi.AddValue(bi.Max, "b.max", value)
+		bi.AddValue(bi.Min, "b.min", value)
+		bi.AddValue(bi.Sum, "b.sum", value)
 	}
 }
 

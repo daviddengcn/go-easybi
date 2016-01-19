@@ -78,8 +78,13 @@ div.right-inner {
 </div>
 <ul>
 	{{$type := .Type}}
-	{{range $.Names}}
-		<li><a href="?name={{.}}&type={{$type}}">{{.}}</a></li>
+	{{range $item := .Names}}
+		<li>{{if .Included}}<a href="?name={{.Prefix}}&type={{$type}}">{{end}}{{.Prefix}}{{if .Included}}</a>{{end}}</li>
+		{{if .Subs}}
+			<ul>{{range $sub := .Subs}}
+				<li><a href="?name={{$item.Prefix}}.{{$sub}}&type={{$type}}">{{$sub}}</a></li>
+			{{end}}</ul>
+		{{end}}
 	{{end}}
 </ul>
 </div></td>

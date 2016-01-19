@@ -186,6 +186,10 @@ func ReadNames() ([]string, error) {
 			return nil
 		}
 		if err := namesB.ForEach(func(k, _ []byte) error {
+			if len(k) == 0 {
+				// Ignore empty names.
+				return nil
+			}
 			names = append(names, string(k))
 			return nil
 		}); err != nil {

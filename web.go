@@ -4,6 +4,8 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"sort"
+	"strings"
 )
 
 var (
@@ -20,6 +22,36 @@ func chooseDefault(vs []string, v string) string {
 		}
 	}
 	return vs[0]
+}
+
+type prefixSubs struct {
+	Prefix   string
+	Included bool // True if the Prefix itself is avalid name
+	Subs     []string
+}
+
+func organizeNames(names []string) []prefixSubs {
+	sort.Strings(names)
+	var res []prefixSubs
+	currentPrefix := ""
+	for _, name := range names {
+		prefix := name
+		p := strings.IndexByte(name, '.')
+		if p > 0 && p < len(name)-1 {
+			prefix = name[:p]
+		}
+		if prefix != currentPrefix {
+			res = append(res, prefixSubs{
+				Prefix: prefix, Included: prefix == name,
+			})
+		}
+		ps := &res[len(res)-1]
+		if prefix != name {
+			ps.Subs = append(ps.Subs, name[len(prefix)+1:])
+		}
+		currentPrefix = prefix
+	}
+	return res
 }
 
 func handler(w http.ResponseWriter, req *http.Request) {
@@ -47,13 +79,14 @@ func handler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	log.Printf("name: %v, data: %v", name, data)
+	organizedNames := organizeNames(names)
 	if err := tmpl.Execute(w, struct {
-		Names []string
+		Names []prefixSubs
 		Name  string
 		Type  string
 		Data  []LabeledCounter
 	}{
-		Names: names,
+		Names: organizedNames,
 		Name:  name,
 		Type:  tp,
 		Data:  data,
