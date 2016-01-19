@@ -4,7 +4,6 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"sort"
 	"strings"
 )
 
@@ -27,31 +26,35 @@ func chooseDefault(vs []string, v string) string {
 type prefixSubs struct {
 	Prefix   string
 	Included bool // True if the Prefix itself is avalid name
-	Subs     []string
+	Subs     []prefixSubs
+}
+
+func prefixSubsFromParts(parts []string) prefixSubs {
+	ps := prefixSubs{
+		Prefix:   parts[0],
+		Included: len(parts) == 1,
+	}
+	if len(parts) > 1 {
+		ps.Subs = []prefixSubs{prefixSubsFromParts(parts[1:])}
+	}
+	return ps
+}
+
+func (ps *prefixSubs) insert(subs []string) {
+	if len(ps.Subs) == 0 || ps.Subs[len(ps.Subs)-1].Prefix != subs[0] {
+		// A new prefix, add an item to ps.Subs
+		ps.Subs = append(ps.Subs, prefixSubsFromParts(subs))
+		return
+	}
+	ps.Subs[len(ps.Subs)-1].insert(subs[1:])
 }
 
 func organizeNames(names []string) []prefixSubs {
-	sort.Strings(names)
-	var res []prefixSubs
-	currentPrefix := ""
+	var res prefixSubs
 	for _, name := range names {
-		prefix := name
-		p := strings.IndexByte(name, '.')
-		if p > 0 && p < len(name)-1 {
-			prefix = name[:p]
-		}
-		if prefix != currentPrefix {
-			res = append(res, prefixSubs{
-				Prefix: prefix, Included: prefix == name,
-			})
-		}
-		ps := &res[len(res)-1]
-		if prefix != name {
-			ps.Subs = append(ps.Subs, name[len(prefix)+1:])
-		}
-		currentPrefix = prefix
+		res.insert(strings.SplitN(name, ".", 3))
 	}
-	return res
+	return res.Subs
 }
 
 func handler(w http.ResponseWriter, req *http.Request) {

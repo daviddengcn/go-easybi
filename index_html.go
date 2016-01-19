@@ -16,6 +16,7 @@ const gIndexHtml string = `
 		{{range $idx, $c := .Data }}
 		  data.addRows([
 		    ['{{$c.Label}}', {{$c.Count}}],
+		    ['{{$c.Label}}', {{$c.Count}}],
 		  ]);
 		{{end}}
 		{{end}}
@@ -57,6 +58,9 @@ div.left-inner {
 	height: 100%;
     overflow: scroll;
 }
+div.left-inner ul {
+	padding-left: 20px;
+}
 td.right-panel {
 	background-color: white;
 }
@@ -78,11 +82,20 @@ div.right-inner {
 </div>
 <ul>
 	{{$type := .Type}}
-	{{range $item := .Names}}
-		<li>{{if .Included}}<a href="?name={{.Prefix}}&type={{$type}}">{{end}}{{.Prefix}}{{if .Included}}</a>{{end}}</li>
+	{{range $sub := .Names}}
+		{{$prefix1 := $sub.Prefix}}
+		<li>{{if .Included}}<a href="?name={{$prefix1}}&type={{$type}}">{{end}}{{.Prefix}}{{if .Included}}</a>{{end}}</li>
 		{{if .Subs}}
 			<ul>{{range $sub := .Subs}}
-				<li><a href="?name={{$item.Prefix}}.{{$sub}}&type={{$type}}">{{$sub}}</a></li>
+			    {{$prefix2 := print $prefix1 "." $sub.Prefix}}
+				<li>{{if .Included}}<a href="?name={{$prefix2}}&type={{$type}}">{{end}}{{.Prefix}}{{if .Included}}</a>{{end}}
+					{{if .Subs}}
+						<ul>{{range $sub := .Subs}}
+						    {{$prefix3 := print $prefix2 "." $sub.Prefix}}
+							<li>{{if .Included}}<a href="?name={{$prefix3}}&type={{$type}}">{{end}}{{.Prefix}}{{if .Included}}</a>{{end}}</li>
+						{{end}}</ul>
+					{{end}}
+				</li>
 			{{end}}</ul>
 		{{end}}
 	{{end}}

@@ -282,7 +282,6 @@ func Process() {
 					log.Printf("b.Put failed: %v", err)
 					return err
 				}
-				log.Printf("date: %v, counter: %+v", label, c)
 				return nil
 			}
 			if err := appendValue(Daily, when.Format("2006-01-02")); err != nil {
