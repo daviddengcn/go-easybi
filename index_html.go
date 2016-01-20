@@ -16,7 +16,6 @@ const gIndexHtml string = `
 		{{range $idx, $c := .Data }}
 		  data.addRows([
 		    ['{{$c.Label}}', {{$c.Count}}],
-		    ['{{$c.Label}}', {{$c.Count}}],
 		  ]);
 		{{end}}
 		{{end}}
