@@ -59,6 +59,19 @@ func (c *Counter) Append(aggr AggregateMethod, v int) {
 	}
 }
 
+func (c *Counter) append(aggr AggregateMethod, cc Counter) {
+	switch aggr {
+	case Sum:
+		c.Sum, c.Div = c.Count()+cc.Count(), 1
+	case Min:
+		c.Sum, c.Div = mathp.MinI(c.Count(), cc.Count()), 1
+	case Max:
+		c.Sum, c.Div = mathp.MaxI(c.Count(), cc.Count()), 1
+	case Average:
+		c.Sum, c.Div = c.Sum+cc.Sum, c.Div+cc.Div
+	}
+}
+
 func (c *Counter) ToJSON() []byte {
 	j, _ := json.Marshal(c)
 	return j
@@ -68,7 +81,9 @@ func (c *Counter) ToJSON() []byte {
 func counterFromJSON(j []byte) Counter {
 	var c Counter
 	if err := json.Unmarshal(j, &c); err != nil {
-		log.Printf("Parsing JSON %v failed: %v, the zero value used", string(j), err)
+		if len(j) > 0 {
+			log.Printf("Unmarshal %v failed: %v", j, err)
+		}
 		c = Counter{}
 	}
 	return c
