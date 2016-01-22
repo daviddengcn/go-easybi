@@ -72,6 +72,9 @@ func doReadNames() {
 		log.Fatalf("ReadNames failed: %v", err)
 	}
 	fmtp.Printfln("Names: %v", names)
+	for _, name := names {
+		fmtp.Printfln("  %s", name)
+	}
 }
 
 func doShowValues() {
