@@ -57,6 +57,19 @@ func organizeNames(names []string) []prefixSubs {
 	return res.Subs
 }
 
+func dataDiff(data []LabeledCounter) []LabeledCounter {
+	if len(data) < 2 {
+		return nil
+	}
+	diff := make([]LabeledCounter, 0, len(data)-1)
+	for i := 1; i < len(data); i++ {
+		lc := data[i]
+		lc.Append(Sum, -data[i-1].Count())
+		diff = append(diff, lc)
+	}
+	return diff
+}
+
 func handler(w http.ResponseWriter, req *http.Request) {
 	names, err := ReadNames()
 	if err != nil {
@@ -70,7 +83,7 @@ func handler(w http.ResponseWriter, req *http.Request) {
 		q["type"] = []string{tp}
 		u := *req.URL
 		u.RawQuery = q.Encode()
-		http.Redirect(w, req, u.String(), 301)
+		http.Redirect(w, req, u.String(), http.StatusMovedPermanently)
 		return
 	}
 	var data []LabeledCounter
@@ -79,6 +92,9 @@ func handler(w http.ResponseWriter, req *http.Request) {
 		data, err = ReadDataOfName(tp, name)
 		if err != nil {
 			log.Printf("ReadDataOfName %v failed: %v", name, err)
+		}
+		if req.FormValue("diff") != "" {
+			data = dataDiff(data)
 		}
 	}
 	log.Printf("name: %v, data: %v", name, data)

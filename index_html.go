@@ -83,15 +83,15 @@ div.right-inner {
 	{{$type := .Type}}
 	{{range $sub := .Names}}
 		{{$prefix1 := $sub.Prefix}}
-		<li>{{if .Included}}<a href="?name={{$prefix1}}&type={{$type}}">{{end}}{{.Prefix}}{{if .Included}}</a>{{end}}</li>
+		<li>{{if .Included}}<a href="?name={{$prefix1}}&type={{$type}}">{{end}}{{.Prefix}}{{if .Included}}</a> - <a href="?name={{$prefix1}}&type={{$type}}&diff=1">diff</a>{{end}}</li>
 		{{if .Subs}}
 			<ul>{{range $sub := .Subs}}
 			    {{$prefix2 := print $prefix1 "." $sub.Prefix}}
-				<li>{{if .Included}}<a href="?name={{$prefix2}}&type={{$type}}">{{end}}{{.Prefix}}{{if .Included}}</a>{{end}}
+				<li>{{if .Included}}<a href="?name={{$prefix2}}&type={{$type}}">{{end}}{{.Prefix}}{{if .Included}}</a> - <a href="?name={{$prefix2}}&type={{$type}}&diff=1">diff</a>{{end}}
 					{{if .Subs}}
 						<ul>{{range $sub := .Subs}}
 						    {{$prefix3 := print $prefix2 "." $sub.Prefix}}
-							<li>{{if .Included}}<a href="?name={{$prefix3}}&type={{$type}}">{{end}}{{.Prefix}}{{if .Included}}</a>{{end}}</li>
+							<li>{{if .Included}}<a href="?name={{$prefix3}}&type={{$type}}">{{end}}{{.Prefix}}{{if .Included}}</a> - <a href="?name={{$prefix3}}&type={{$type}}&diff=1">diff</a>{{end}}</li>
 						{{end}}</ul>
 					{{end}}
 				</li>
