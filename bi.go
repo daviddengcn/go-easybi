@@ -125,6 +125,10 @@ func AddValue(aggr AggregateMethod, name string, value int) {
 	}
 }
 
+func Inc(name string) {
+	AddValue(Sum, name, 1)
+}
+
 func Flush() {
 	done := make(chan struct{})
 	gCounterChan <- done
@@ -205,7 +209,7 @@ func ReadNames() ([]string, error) {
 		}
 		return nil
 	}); err != nil {
-		return names, err
+		return nil, err
 	}
 	return names, nil
 }

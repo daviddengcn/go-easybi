@@ -74,6 +74,37 @@ func TestSimpleFlow(t *testing.T) {
 	}})
 }
 
+func TestInc(t *testing.T) {
+	DataPath = "./tmp.bolt"
+	FlushPeriod = time.Second
+	err := os.RemoveAll(DataPath)
+	if err != nil && err != os.ErrNotExist {
+		assert.NoError(t, err)
+		return
+	}
+
+	now := time.Now()
+	Inc("abc")
+	Flush()
+	Process()
+	assert.Equal(t, "gBoltDBBox.count", gBoltDBBox.count, 0)
+	assert.Equal(t, "gBoltDBBox.db", gBoltDBBox.db, (*bolt.DB)(nil))
+
+	names, err := ReadNames()
+	assert.NoError(t, err)
+	assert.Equal(t, "names", names, []string{"abc"})
+
+	data, err := ReadDataOfName("daily", "abc")
+	assert.NoError(t, err)
+	assert.Equal(t, "data", data, []LabeledCounter{{
+		Counter{
+			Sum: 1,
+			Div: 1,
+		},
+		now.Format("2006-01-02"),
+	}})
+}
+
 func TestMoveData(t *testing.T) {
 	DataPath = "./tmp.bolt"
 	FlushPeriod = time.Second
