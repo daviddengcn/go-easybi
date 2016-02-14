@@ -71,6 +71,8 @@ func dataDiff(data []LabeledCounter) []LabeledCounter {
 }
 
 func handler(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+
 	names, err := ReadNames()
 	if err != nil {
 		log.Printf("ReadNames failed: %v", err)
