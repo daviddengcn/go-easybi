@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
+	"github.com/golangplus/bytes"
 	"github.com/golangplus/encoding/json"
 	"github.com/golangplus/errors"
 
-	"github.com/boltdb/bolt"
+	"github.com/daviddengcn/bolthelper"
 )
 
 var (
@@ -62,15 +62,15 @@ func collectValues() {
 	flush := func() {
 		if len(counters) > 0 {
 			func() {
-				if err := updateDB(func(tx *bolt.Tx) error {
-					b, err := tx.CreateBucketIfNotExists([]byte("active"))
+				if err := updateDB(func(tx bh.Tx) error {
+					b, err := tx.CreateBucketIfNotExists([][]byte{[]byte("active")})
 					if err != nil {
 						return errorsp.WithStacks(err)
 					}
 					for name, items := range counters {
 						for _, item := range items {
 							ts := itob(uint64(item.when.UnixNano()))
-							if err := b.Put(ts[:], jsonp.MarshalIgnoreError(kv{
+							if err := b.Put([][]byte{ts[:]}, jsonp.MarshalIgnoreError(kv{
 								Aggr:  item.aggr,
 								Key:   name,
 								Value: item.value,
@@ -135,79 +135,41 @@ func Flush() {
 	<-done
 }
 
-type boltDBBox struct {
-	sync.Mutex
-
-	db    *bolt.DB
-	count int
+var gBoltDBBox = bh.RefCountBox{
+	DataPath: func() string { return DataPath },
 }
 
-var gBoltDBBox boltDBBox
-
-func (box *boltDBBox) alloc() (*bolt.DB, error) {
-	box.Lock()
-	defer box.Unlock()
-
-	if box.db == nil {
-		db, err := bolt.Open(DataPath, 0644, nil)
-		if err != nil {
-			return nil, err
-		}
-		box.db, box.count = db, 0
-	}
-	box.count++
-	return box.db, nil
-}
-
-func (box *boltDBBox) free() {
-	box.Lock()
-	defer box.Unlock()
-
-	box.count--
-	if box.count == 0 {
-		box.db.Close()
-		box.db = nil
-	}
-}
-
-func updateDB(f func(*bolt.Tx) error) error {
-	db, err := gBoltDBBox.alloc()
+func updateDB(f func(bh.Tx) error) error {
+	db, err := gBoltDBBox.Alloc()
 	if err != nil {
 		return err
 	}
-	defer gBoltDBBox.free()
+	defer gBoltDBBox.Free()
 
 	return db.Update(f)
 }
 
-func viewDB(f func(*bolt.Tx) error) error {
-	db, err := gBoltDBBox.alloc()
+func viewDB(f func(bh.Tx) error) error {
+	db, err := gBoltDBBox.Alloc()
 	if err != nil {
 		return err
 	}
-	defer gBoltDBBox.free()
+	defer gBoltDBBox.Free()
 
 	return db.View(f)
 }
 
 func ReadNames() ([]string, error) {
 	var names []string
-	if err := viewDB(func(tx *bolt.Tx) error {
-		namesB := tx.Bucket([]byte("names"))
-		if namesB == nil {
-			return nil
-		}
-		if err := namesB.ForEach(func(k, _ []byte) error {
+	if err := viewDB(func(tx bh.Tx) error {
+		return tx.ForEach([][]byte{[]byte("names")}, func(_ bh.Bucket, k bytesp.Slice, _ bytesp.Slice) error {
 			if len(k) == 0 {
 				// Ignore empty names.
 				return nil
 			}
 			names = append(names, string(k))
 			return nil
-		}); err != nil {
-			return err
-		}
-		return nil
+		})
 	}); err != nil {
 		return nil, err
 	}
@@ -221,25 +183,14 @@ type LabeledCounter struct {
 
 func ReadDataOfName(tp, name string) ([]LabeledCounter, error) {
 	var counters []LabeledCounter
-	if err := viewDB(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(tp))
-		if b == nil {
-			return nil
-		}
-		namedB := b.Bucket([]byte(name))
-		if namedB == nil {
-			return nil
-		}
-		if err := namedB.ForEach(func(k, v []byte) error {
+	if err := viewDB(func(tx bh.Tx) error {
+		return tx.ForEach([][]byte{[]byte(tp), []byte(name)}, func(_ bh.Bucket, k bytesp.Slice, v bytesp.Slice) error {
 			counters = append(counters, LabeledCounter{
 				Label:   string(k),
 				Counter: counterFromJSON(v),
 			})
 			return nil
-		}); err != nil {
-			return err
-		}
-		return nil
+		})
 	}); err != nil {
 		return nil, err
 	}
@@ -250,42 +201,32 @@ func MoveData(from, to string, aggr AggregateMethod) error {
 	if from == to {
 		return nil
 	}
-	return errorsp.WithStacks(updateDB(func(tx *bolt.Tx) error {
-		namesB, err := tx.CreateBucketIfNotExists([]byte("names"))
-		if err != nil {
+	return errorsp.WithStacks(updateDB(func(tx bh.Tx) error {
+		if err := tx.Delete([][]byte{[]byte("names"), []byte(from)}); err != nil {
 			return err
 		}
-		namesB.Delete([]byte(from))
-		namesB.Put([]byte(to), []byte{})
+		if err := tx.Put([][]byte{[]byte("names"), []byte(to)}, []byte{}); err != nil {
+			return err
+		}
 
 		for _, tp := range []string{Daily, Weekly, Monthly, Yearly} {
-			b := tx.Bucket([]byte(tp))
-			if b == nil {
-				log.Printf("Backet of %v not found!", tp)
-				return nil
-			}
-			fromB := b.Bucket([]byte(from))
-			if fromB == nil {
-				log.Printf("Backet of %v in %v not found!", from, tp)
-				return nil
-			}
-			toB, err := b.CreateBucketIfNotExists([]byte(to))
+			toB, err := tx.CreateBucketIfNotExists([][]byte{[]byte(tp), []byte(to)})
 			if err != nil {
-				return errorsp.WithStacks(err)
+				return err
 			}
-			if err := fromB.ForEach(func(k, fromV []byte) error {
-				if err := fromB.Delete(k); err != nil {
-					return errorsp.WithStacks(err)
+			if err := tx.ForEach([][]byte{[]byte(tp), []byte(from)}, func(fromB bh.Bucket, k bytesp.Slice, fromV bytesp.Slice) error {
+				if err := fromB.Delete([][]byte{k}); err != nil {
+					return err
 				}
 				toV := toB.Get(k)
 				if toV == nil {
-					return errorsp.WithStacks(toB.Put(k, fromV))
+					return toB.Put([][]byte{k}, fromV)
 				}
 				c := counterFromJSON(toV)
 				c.append(aggr, counterFromJSON(fromV))
-				return errorsp.WithStacks(toB.Put(k, c.ToJSON()))
+				return toB.Put([][]byte{k}, c.ToJSON())
 			}); err != nil {
-				return errorsp.WithStacks(err)
+				return err
 			}
 		}
 		return nil
@@ -293,42 +234,24 @@ func MoveData(from, to string, aggr AggregateMethod) error {
 }
 
 func Process() {
-	if err := updateDB(func(tx *bolt.Tx) error {
-		activeB, err := tx.CreateBucketIfNotExists([]byte("active"))
-		if err != nil {
-			log.Printf("CreateBucketIfNotExists: %v", err)
-			return err
-		}
-		namesB, err := tx.CreateBucketIfNotExists([]byte("names"))
-		if err != nil {
-			return err
-		}
-		if err := activeB.ForEach(func(k, v []byte) error {
+	if err := updateDB(func(tx bh.Tx) error {
+		return tx.ForEach([][]byte{[]byte("active")}, func(activeB bh.Bucket, k bytesp.Slice, v bytesp.Slice) error {
 			ts := int64(binary.BigEndian.Uint64(k))
 			var kv kv
 			if err := json.Unmarshal(v, &kv); err != nil {
-				log.Printf("Unmarshal %v failed: %v", string(v), err)
 				return err
 			}
 			name, value := kv.Key, kv.Value
-			namesB.Put([]byte(name), []byte{})
+			tx.Put([][]byte{[]byte("names"), []byte(name)}, []byte{})
 
 			when := time.Unix(0, ts)
 
 			appendValue := func(tp, label string) error {
-				b, err := tx.CreateBucketIfNotExists([]byte(tp))
-				if err != nil {
-					return err
-				}
-				namedB, err := b.CreateBucketIfNotExists([]byte(name))
-				label_bs := []byte(label)
-				c := counterFromJSON(namedB.Get(label_bs))
-				c.Append(kv.Aggr, value)
-				if err := namedB.Put(label_bs, c.ToJSON()); err != nil {
-					log.Printf("b.Put failed: %v", err)
-					return err
-				}
-				return nil
+				return tx.Update([][]byte{[]byte(tp), []byte(name), []byte(label)}, func(v bytesp.Slice) (bytesp.Slice, error) {
+					c := counterFromJSON(v)
+					c.Append(kv.Aggr, value)
+					return c.ToJSON(), nil
+				})
 			}
 			if err := appendValue(Daily, when.Format("2006-01-02")); err != nil {
 				return err
@@ -344,12 +267,8 @@ func Process() {
 			if err := appendValue(Yearly, when.Format("2006")); err != nil {
 				return err
 			}
-			return activeB.Delete(k)
-		}); err != nil {
-			log.Printf("activeB.ForEach failed: %v", err)
-			return err
-		}
-		return nil
+			return activeB.Delete([][]byte{k})
+		})
 	}); err != nil {
 		log.Printf("updateDB failed: %v", err)
 	}

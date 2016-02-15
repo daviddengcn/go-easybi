@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/boltdb/bolt"
 	"github.com/golangplus/testing/assert"
 )
 
@@ -23,8 +22,6 @@ func TestSimpleFlow(t *testing.T) {
 	AddValue(Average, "abc", 123)
 	Flush()
 	Process()
-	assert.Equal(t, "gBoltDBBox.count", gBoltDBBox.count, 0)
-	assert.Equal(t, "gBoltDBBox.db", gBoltDBBox.db, (*bolt.DB)(nil))
 
 	names, err := ReadNames()
 	assert.NoError(t, err)
@@ -87,8 +84,6 @@ func TestInc(t *testing.T) {
 	Inc("abc")
 	Flush()
 	Process()
-	assert.Equal(t, "gBoltDBBox.count", gBoltDBBox.count, 0)
-	assert.Equal(t, "gBoltDBBox.db", gBoltDBBox.db, (*bolt.DB)(nil))
 
 	names, err := ReadNames()
 	assert.NoError(t, err)
